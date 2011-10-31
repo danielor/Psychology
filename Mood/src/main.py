@@ -3,13 +3,48 @@ Created on Oct 30, 2011
 
 @author: daniel
 '''
-import os
+import os, random
 
 from django.utils import simplejson
 from google.appengine.ext import webapp
 from google.appengine.ext import db
 from google.appengine.ext.webapp import template
 from google.appengine.ext.webapp import util
+
+latinAndGreek = ['vol', 'viv', 'vit', 'ven', 'van', 'vel','zo', 'urb', 'urg', 'unc', 'ulo', 'trin',
+            'trem', 'tri', 'tot', 'tim', 'the', 'tep', 'tax', 'sud', 'sui', 'styl', 'sten', 'su',
+            'st', 'son', 'sol', 'sil', 'ser', 'sen', 'sei','sed', 'seb', 'sfi', 'sax', 'san',
+            'sax', 'rur', 'rug', 'rot', 'rog', 'rod', 'rhe', 'ren', 'rar', 'ran', 'rad', 'ras',
+            'qui', 'put', 'pur', 'pup', 'pto', 'pro', 'pre', 'pot', 'pon', 'por', 'pol', 'pod',
+            'plu', 'pis', 'pir', 'pin', 'pil', 'pic', 'pet', 'per', 'pen', 'ped','pav', 'pat',
+            'pan', 'pam', 'pal', 'pac', 'oxy', 'ovi', 'ov', 'ot','orn','or', 'opt', 'oo', 'ont',
+            'omo', 'omm', 'oma',  'ole', 'oen', 'oed', 'od', 'oct', 'ob', 'o', 'oc', 'os', 'nuc',
+            'nub', 'nu', 'nox', 'noc', 'nov', 'not', 'non', 'nod', 'nes', 'neg', 'nav', 'nas', 'nar',
+            'myz', 'myx', 'my', 'mut', 'mus', 'mur', 'mov', 'mot', 'mon', 'mol', 'mne', 'mit', 'mis',
+            'mir', 'min', 'mim', 'mic', 'mes', 'mer', 'mei', 'mar', 'man', 'mal', 'maj', 'lun', 'lud',
+            'lus', 'luc', 'log', 'loc', 'lin', 'lig', 'lev', 'lep', 'leg', 'lax', 'lav', 'lat', 'lab',
+            'juv', 'jut', 'jus', 'jur', 'jug', 'joc', 'jac', 'is', 'iso', 'in', 'il', 'im', 'ir', 
+            'ign', 'idi', 'ide', 'id', 'hor', 'hod', 'hex', 'hen', 'hai', 'hei', 'hab', 'hib', 'gyn',
+            'ger', 'gen', 'gel', 'ge', 'geo', 'fur', 'fum', 'fug', 'for', 'flu', 'fl', 'fin', 'fil',
+            'fic', 'fis', 'fet','fer', 'fel', 'fat', 'fab','exo', 'ex', 'ef', 'eur', 'eu', 'eso',
+            'err', 'erg', 'equ', 'iqu', 'epi', 'ep', 'ens', 'en', 'em', 'eme', 'ego', 'eg', 'ed', 
+            'es', 'ec', 'eco', 'dys', 'dy', 'dur', 'dub', 'du', 'dom', 'dia', 'di', 'den', 'deb', 
+            'de', 'cyt', 'cut', 'cub', 'cre', 'con', 'co', 'col', 'com', 'cor', 'col', 'civ', 'cen',
+            'ced', 'cav', 'can', 'cap', 'cip', 'can', 'cin', 'cad', 'cis', 'cas', 'cac', 'bov',
+            'bor', 'bon', 'bi', 'bio', 'bib', 'bi', 'ben', 'be', 'bac', 'axi', 'avi', 'aut', 'aur',
+            'aud', 'ar', 'aqu', 'apo', 'ant', 'ann', 'enn', 'ana', 'an', 'am', 'alb', 'ad', 'ac', 
+            'af', 'ag', 'al', 'ap', 'ar', 'as', 'at', 'acr', 'ac', 'ab', 'abs']
+
+def generateName(numberOfRoots, numberOfWords):
+    """Generate a name from the number of roots"""
+    listOfNames = []
+    for _ in numberOfWords:
+        name = ""
+        for _ in range(numberOfRoots):
+            name += latinAndGreek[random.randint(0, len(latinAndGreek))]
+        listOfNames.append(name)
+    return listOfNames
+
 
 class User(db.Model):
     """The user of the application"""
@@ -21,10 +56,16 @@ class Question(db.Model):
     """Get the equstion of a model"""
     answer_list = db.StringListProperty()
     question = db.StringProperty()
-
+    
+    def toJSON(self):
+        """Return the JSON of the question"""
+        return {"class" : "Question", "value": {'answer_list' : self.answer_list,
+                                                'question' : self.question}}
 class Answer(db.Model):
     """Get the answer of the model"""
     location = db.GeoPtProperty()
+    degree = db.FloatProperty()
+    answer = db.StringProperty()
     user = db.ReferenceProperty(User)
     question = db.ReferenceProperty(Question)
     
@@ -92,6 +133,12 @@ class RPCMethods:
         else:
             return False
         
+    def Get(self, *args):
+        """Get any object into the database"""
+        if args[0] == "Question":
+            return self._GetQuestion(args[1])
+
+    # The add interface
     def _AddQuestion(self, cmd):
         """Add a question to the file"""
         q = Question()
@@ -105,7 +152,11 @@ class RPCMethods:
         a = Answer()
         a.user = User.get_by_key_name(cmd['user'])
         a.question = Question.get_by_key_name(cmd['question'])
-        a.location = db.GeoPt(cmd['location'][0], cmd['latitude'][1])
+        a.answer = cmd['answer']
+        if cmd.has_key('location'):
+            a.location = db.GeoPt(float(cmd['location'][0]), float(cmd['latitude'][1]))
+        if cmd.has_key('degree'):
+            a.degree = float(cmd['degree'])
         a.put()
         return {'key' : a.key().name()}
     
@@ -113,13 +164,22 @@ class RPCMethods:
         """Add a user to the database"""
         u = User()
         if cmd.has_key('age'):
-            u.age = cmd['age']
+            u.age = int(cmd['age'])
         if cmd.has_key('sex'):
-            u.sex = cmd['sex']
+            u.sex = int(cmd['sex'])
         u.Id = cmd['id']
         u.put()
         return {'key' : u.key().name()}
-
+    
+    # The get interface
+    def _GetQuestion(self, cmd):
+        """Get a question from the database"""
+        if cmd.has_key('random'):
+            q = Question()
+            q.answer_list = [generateName(3, random.randint(0, 5)) for _ in range(5)]
+            q.question = generateName(2, random.randint(0, 7)) + "?"
+            return q.toJSON()
+        return False
 def main():
     app = webapp.WSGIApplication([
         ('/rpc', RPCHandler),
