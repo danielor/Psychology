@@ -51,6 +51,7 @@ class User(db.Model):
     Id = db.StringProperty()
     age = db.IntegerProperty()
     sex = db.IntegerProperty()
+    totalAnswers = db.IntegerProperty()
 
 class Question(db.Model):
     """Get the equstion of a model"""
@@ -67,6 +68,7 @@ class Answer(db.Model):
     degree = db.FloatProperty()
     answer = db.StringProperty()
     user = db.ReferenceProperty(User)
+    answerNumber = db.FloatProperty()               # The number of answers
     question = db.ReferenceProperty(Question)
     
 class RPCHandler(webapp.RequestHandler):
@@ -137,6 +139,8 @@ class RPCMethods:
         """Get any object into the database"""
         if args[0] == "Question":
             return self._GetQuestion(args[1])
+        elif args[0] == "UserAnswer":
+            return self._GetUserAnswers(args[1])
 
     # The add interface
     def _AddQuestion(self, cmd):
@@ -150,14 +154,22 @@ class RPCMethods:
     def _AddAnswer(self, cmd):
         """Add a answer to the database"""
         a = Answer()
-        a.user = User.get_by_key_name(cmd['user'])
+        user = User.get_by_key_name(cmd['user'])
+        a.user = user
         a.question = Question.get_by_key_name(cmd['question'])
         a.answer = cmd['answer']
+        a.answerNumber = user.totalAnswers
+ 
+        # Conditional answers
         if cmd.has_key('location'):
             a.location = db.GeoPt(float(cmd['location'][0]), float(cmd['latitude'][1]))
         if cmd.has_key('degree'):
             a.degree = float(cmd['degree'])
+        
+        # Update the server
         a.put()
+        user.totalAnswers = user.totalAnswers + 1
+        user.put()
         return {'key' : a.key().name()}
     
     def _AddUser(self, cmd):
@@ -180,6 +192,15 @@ class RPCMethods:
             q.question = generateName(2, random.randint(0, 7)) + "?"
             return q.toJSON()
         return False
+    
+    def _GetUserAnswers(self, cmd):
+        """Get the users answers"""
+        user = User.get_by_key_name(cmd['user'])
+        rangeList = [i for i in range(cmd['minrange'], cmd['maxrange'])]
+        a = Answer.all().filter('user =', user).filter('answerNumber IN', rangeList)
+        answerList = a.fetch(1000)
+        return {'answerlist':answerList}
+        
 def main():
     app = webapp.WSGIApplication([
         ('/rpc', RPCHandler),
