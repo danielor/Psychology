@@ -3,9 +3,9 @@ Created on Oct 30, 2011
 
 @author: daniel
 '''
-import os, random
+import os, random,logging
 
-from django.utils import simplejson
+import json
 from google.appengine.ext import webapp
 from google.appengine.ext import db
 from google.appengine.ext.webapp import template
@@ -38,11 +38,11 @@ latinAndGreek = ['vol', 'viv', 'vit', 'ven', 'van', 'vel','zo', 'urb', 'urg', 'u
 def generateName(numberOfRoots, numberOfWords):
     """Generate a name from the number of roots"""
     listOfNames = []
-    for _ in numberOfWords:
+    for _ in range(numberOfWords):
         name = ""
         for _ in range(numberOfRoots):
-            name += latinAndGreek[random.randint(0, len(latinAndGreek))]
-        listOfNames.append(name)
+            name += latinAndGreek[random.randint(0, len(latinAndGreek) - 1)]
+        listOfNames.append(str(name))
     return listOfNames
 
 
@@ -95,16 +95,18 @@ class RPCHandler(webapp.RequestHandler):
         args = ()
         while True:
             key = 'arg%d' % len(args)
-            val = self.request.get(key)
+            val = str(self.request.get(key))
+            logging.error(val.__class__)
+            logging.error(val)
             if val:
-                args += (simplejson.loads(val),)
+                args += (json.loads(val),)
             else:
                 break
         result = func(*args)
-        self.response.out.write(simplejson.dumps(result))
+        self.response.out.write(json.dumps(result))
 
     def post(self):
-        args = simplejson.loads(self.request.body)
+        args = json.loads(self.request.body)
         func, args = args[0], args[1:]
 
         if func[0] == '_':
@@ -117,7 +119,7 @@ class RPCHandler(webapp.RequestHandler):
             return
 
         result = func(*args)
-        self.response.out.write(simplejson.dumps(result))
+        self.response.out.write(json.dumps(result))
 
 class RPCMethods:
     """ 
@@ -127,7 +129,7 @@ class RPCMethods:
     def Add(self, *args):
         """Add any object into the database"""
         if args[0] == "Question":
-            return self._AddQuestion(args[1])
+            return self._AddQuestion(json.loads(args[1]))
         elif args[0] == "Answer":
             return self._AddAnswer(args[1])
         elif args[0] == "User":
@@ -186,10 +188,18 @@ class RPCMethods:
     # The get interface
     def _GetQuestion(self, cmd):
         """Get a question from the database"""
+        
+        logging.error(str(cmd))
+        #raise ValueError("No JSON object could be decoded")json = simplejson.loads(cmd)
+    
         if cmd.has_key('random'):
             q = Question()
-            q.answer_list = [generateName(3, random.randint(0, 5)) for _ in range(5)]
-            q.question = generateName(2, random.randint(0, 7)) + "?"
+            answer_list = []
+           
+            answer_list.extend(([" ".join( generateName(3, random.randint(1, 5)))  for _ in range(5) ]))
+            q.answer_list = answer_list
+            question = generateName(2, random.randint(0, 7))
+            q.question = " ".join(question) + "?"
             return q.toJSON()
         return False
     
